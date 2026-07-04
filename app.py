@@ -4,18 +4,17 @@ from flask import Flask, jsonify
 from flask_cors import CORS
 from dotenv import load_dotenv
 
-# Initialize the .env loader before accessing any os.environ variables
+# Initialize the .env loader
 load_dotenv()
 
 app = Flask(__name__)
 CORS(app)
 
-# Pulling securely from the .env file
+# Secure credential loading
 RAPIDAPI_KEY = os.environ.get("RAPIDAPI_KEY")
 RAPIDAPI_HOST = os.environ.get("RAPIDAPI_HOST")
 
 def get_fallback_rates():
-    # Executes if the API fails, times out, or quota is exceeded
     return {"petrol": 109.52, "diesel": 95.76, "source": "fallback_static"}
 
 @app.route('/fuel-price/<city>', methods=['GET'])
@@ -24,21 +23,21 @@ def get_fuel_price(city):
         print("Server Error: Missing credentials in .env file.")
         return jsonify(get_fallback_rates()), 200
 
-    # You MUST replace 'city_price_endpoint' with the actual endpoint from the documentation
-    # that accepts a city name and returns the price.
-    URL = f"https://{RAPIDAPI_HOST}/city_price_endpoint/"
+    # 1. Corrected URL endpoint
+    URL = f"https://{RAPIDAPI_HOST}/petrol_price_india_city_value/"
     
+    # 2. Corrected Headers (Injecting the requested city directly into the header block)
+    # Using .title() to ensure it matches format like "Chennai" instead of "chennai"
     headers = {
         "x-rapidapi-key": RAPIDAPI_KEY,
         "x-rapidapi-host": RAPIDAPI_HOST,
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
+        "City": city.title() 
     }
 
-    # Pass the city as a query parameter (adjust key 'city' based on API docs)
-    querystring = {"city": city}
-
     try:
-        response = requests.get(URL, headers=headers, params=querystring, timeout=5)
+        # Note: 'params' argument is removed since it is handled in headers
+        response = requests.get(URL, headers=headers, timeout=5)
         
         # Handle API quota limits or server errors gracefully
         if response.status_code in [429, 403, 500]:
@@ -48,8 +47,12 @@ def get_fuel_price(city):
         response.raise_for_status()
         data = response.json()
         
-        # NOTE: You will need to adjust 'data.get(...)' based on the exact JSON 
-        # structure returned by this specific RapidAPI provider.
+        # DEBUG STEP: This prints the exact API response to your terminal
+        print(f"Raw API Data Received: {data}")
+        
+        # 3. JSON Parsing Mapping
+        # If this still returns fallback numbers, look at the terminal output from the print statement above.
+        # Ensure that "petrol_price" and "diesel_price" exactly match the keys in that dictionary.
         return jsonify({
             "petrol": data.get("petrol_price", 109.52),
             "diesel": data.get("diesel_price", 95.76),
